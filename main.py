@@ -3,7 +3,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 import util
 from preprocess import Processor
-from model import ElemExtractor, CEEE
+from model import ElemExtractor, CEEE, Base
 import argparse
 import setting
 import torch
@@ -34,7 +34,7 @@ def train(seed, enc_name, enc_path, data_path, params, charge_desc):
     test_data_loader = DataLoader(dataset_test, batch_size=params['batch_size'], collate_fn=dataset_test.collate_fn, shuffle=False)
 
     print("creating model...")
-    model = CEEE(enc_path, lang, device)
+    model = Base(enc_path, lang, device)
     model.to(device)
     # 定义损失函数，优化器，学习率调整器
     criterion = nn.CrossEntropyLoss()
@@ -47,17 +47,20 @@ def train(seed, enc_name, enc_path, data_path, params, charge_desc):
                                                                    num_cycles=1)
     print("training model...")
     from tqdm import tqdm
-    report_file = open(f"./outputs/reports/{enc_name}_{seed}_{data_path}.txt", "w", encoding="utf-8")
-    for e in range(params['epoch']):
-        print(f"-------------------------------epoch:{e + 1}-------------------------------------")
+    model_id = f"{enc_name}_{'+'.join(params['components'])}_{data_path}"
+    dev_report_file = open(f"./outputs/reports/{model_id}_dev.txt", "w",
+                           encoding="utf-8")  # 记录模型分类报告
+    test_report_file = open(f"./outputs/reports/{model_id}_test.txt", "w",
+                            encoding="utf-8")  # 记录模型分类报告
+    for epoch in range(params['epoch']):
+        print(f"-------------------------------epoch:{epoch + 1}-------------------------------------")
         model.train()
         train_loss = 0
         for ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions in tqdm(train_data_loader):
             # 梯度置零
             optimizer.zero_grad()
-            sent_scores = model(enc_inputs, pad_sp_lens, enc_desc, dfd_positions)
-            labels = util.label_construct(relevant_sents, pad_sp_lens, params["pattern"][0])
-            loss = criterion(sent_scores, torch.tensor(labels).to(device))
+            charge_scores = model(enc_inputs, mask_positions)
+            loss = criterion(charge_scores, torch.tensor(charge_idxs).to(device))
             train_loss+=loss.item()
             # 累计梯度
             loss.backward()
@@ -67,11 +70,10 @@ def train(seed, enc_name, enc_path, data_path, params, charge_desc):
             optimizer.step()
             # 更新学习率
             scheduler.step()
-        print(f"train_loss:{round(train_loss / len(train_data_loader.dataset), 4)}")
-        prefix = f"{enc_name}_{seed}_{data_path}_{e}"
-        torch.save(model, f"./outputs/models/{prefix}.pkl")
-        util.evaluate(model, dev_data_loader, params['pattern'][0], report_file)
-        util.evaluate(model, test_data_loader, params['pattern'][0], report_file)
+        print(f"train_loss:{round(train_loss/len(train_data_loader.dataset), 4)}")
+        # torch.save(model, f"./outputs/models/{prefix}.pkl")
+        util.evaluate(lang, model, epoch, dev_data_loader, dev_report_file, model_id, mode="dev")
+        util.evaluate(lang, model, epoch, test_data_loader, test_report_file, model_id, mode="test")
 
 def main():
     print("Running ...")

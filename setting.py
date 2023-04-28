@@ -37,6 +37,7 @@ params = {"epoch":20,
           "pattern":["all"],# "act", "res", "sub"
           "seeds":[80,19, 23, 94, 13, 0, 7, 47, 21, 81]
           }
+# model_id：enc+components+data_path
 
 if __name__=="__main__":
     pass

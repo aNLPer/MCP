@@ -69,7 +69,8 @@ class ElemExtractor(nn.Module):
         # [batch_size, dim]
         return torch.stack(selected_sents, dim=0)
 
-class CEEE(nn.Module): # Charge Enhenced CEEE
+class CEEE(nn.Module):
+    # Charge Enhenced CEEE
     def __init__(self, model_path, lang, device):
         super(CEEE, self).__init__()
         self.device = device
@@ -94,8 +95,8 @@ class CEEE(nn.Module): # Charge Enhenced CEEE
         token_matched_enc_fact = self.token_match(enc_fact, enc_desc) # [batch_size, seq_len, model_dim]
         token_matched_enc_fact_sent = self.split_tensor(token_matched_enc_fact, pad_sep_lens)
         # position_info
-        # position_reps = self.get_dfd_position_rep(enc_fact, pad_sep_lens, dfd_positions)
-        # position_reps = position_reps.expand(-1, enc_fact_sent.shape[1], -1)
+        position_reps = self.get_dfd_position_rep(enc_fact, pad_sep_lens, dfd_positions)
+        position_reps = position_reps.expand(-1, enc_fact_sent.shape[1], -1)
         combine_tensor = torch.concat([enc_fact_sent, token_matched_enc_fact_sent, position_reps], dim=2)
         # 预测每个句子的重要性 [batch_size, sent_count, 2]
         pred_score = self.sent_pred(combine_tensor)
@@ -129,3 +130,30 @@ class CEEE(nn.Module): # Charge Enhenced CEEE
             sents =  F.max_pool1d(sents, kernel_size=sents.shape[2],stride=2)
             positions.append(sents.view(-1, 768))
         return torch.stack(positions, dim=0)
+
+
+class Base(nn.Module):
+    def __init__(self, model_path, lang, device):
+        super(Base, self).__init__()
+        self.device = device
+        self.lang = lang
+        self.enc = AutoModel.from_pretrained(model_path)
+
+        self.pred = nn.Sequential(
+            nn.Linear(768, int(0.5*768)),
+            nn.ReLU(),
+            nn.Linear(int(0.5*768), len(lang.index2charge))
+        )
+
+    def forward(self, enc_input, mask_positions):
+        enc_input = {k: v.to(self.device) for k, v in enc_input.items()}
+        outputs = self.enc(**enc_input)['last_hidden_state']
+        # [sent_count, hidden_dim]
+        ts = []
+        for idx in range(len(mask_positions)):
+            reps = torch.index_select(outputs[idx].squeeze(), 0, torch.tensor(mask_positions[idx]).to(self.device))
+            ts.append(reps)
+        ts = torch.concat(ts, dim=0)
+        outputs = self.pred(ts)
+        return outputs
+

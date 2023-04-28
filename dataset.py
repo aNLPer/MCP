@@ -1,5 +1,6 @@
 import re
 import json
+import copy
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
