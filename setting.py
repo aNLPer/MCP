@@ -32,7 +32,7 @@ encs = {"albert":"./pretrained_files/albert",
 params = {"epoch":20,
           "batch_size":4,
           "lr":0.00005,
-          "components":["posi", "elem", "charge_desc", "cons"],
+          "model_name":"BaseWP",  #["posi", "elem", "charge_desc", "cons"],
           "data_path":["hard", "easy", "all"],
           "pattern":["all"],# "act", "res", "sub"
           "seeds":[80,19, 23, 94, 13, 0, 7, 47, 21, 81]

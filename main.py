@@ -3,7 +3,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 import util
 from preprocess import Processor
-from model import ElemExtractor, CEEE, Base
+from model import Base, BaseWP, BaseWE, BaseWEE
 import argparse
 import setting
 import torch
@@ -16,7 +16,7 @@ from transformers import get_cosine_with_hard_restarts_schedule_with_warmup
 transformers.logging.set_verbosity_error()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def train(seed, enc_name, enc_path, data_path, params, charge_desc):
+def train(enc_name, enc_path, data_path, params, charge_desc):
     print("preparing dataset...")
     train_path, dev_path, test_path = f"./datasets/{data_path}/train.json",f"./datasets/{data_path}/dev.json",f"./datasets/{data_path}/test.json"
     lang = Lang(train_path)
@@ -34,7 +34,12 @@ def train(seed, enc_name, enc_path, data_path, params, charge_desc):
     test_data_loader = DataLoader(dataset_test, batch_size=params['batch_size'], collate_fn=dataset_test.collate_fn, shuffle=False)
 
     print("creating model...")
-    model = Base(enc_path, lang, device)
+    if params['model_name'] == "Base":
+        model = Base(enc_path, lang, device)
+    if params['model_name'] == "BaseWP":
+        model = BaseWP(enc_path, lang, device)
+    if params['model_name'] == "BaseWE":
+        model = BaseWE(enc_path, lang, device)
     model.to(device)
     # 定义损失函数，优化器，学习率调整器
     criterion = nn.CrossEntropyLoss()
@@ -47,7 +52,7 @@ def train(seed, enc_name, enc_path, data_path, params, charge_desc):
                                                                    num_cycles=1)
     print("training model...")
     from tqdm import tqdm
-    model_id = f"{enc_name}_{'+'.join(params['components'])}_{data_path}"
+    model_id = f"{enc_name}_{params['model_name']}_{data_path}"
     dev_report_file = open(f"./outputs/reports/{model_id}_dev.txt", "w",
                            encoding="utf-8")  # 记录模型分类报告
     test_report_file = open(f"./outputs/reports/{model_id}_test.txt", "w",
@@ -59,7 +64,15 @@ def train(seed, enc_name, enc_path, data_path, params, charge_desc):
         for ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions in tqdm(train_data_loader):
             # 梯度置零
             optimizer.zero_grad()
-            charge_scores = model(enc_inputs, mask_positions)
+            if isinstance(model, Base): # baseline
+                charge_scores = model(enc_inputs, mask_positions) #enc_desc=enc_desc,pad_sp_lens=pad_sp_lens,
+            if isinstance(model, BaseWP): # add dfd position
+                charge_scores = model(enc_inputs, mask_positions, pad_sp_lens, dfd_positions)
+            if isinstance(model, BaseWE): # add anno Elem
+                charge_scores = model(enc_inputs, mask_positions, pad_sp_lens, relevant_sents)
+            if isinstance(model, BaseWEE):
+                charge_scores = model(enc_inputs, mask_positions, pad_sp_lens, relevant_sents)
+
             loss = criterion(charge_scores, torch.tensor(charge_idxs).to(device))
             train_loss+=loss.item()
             # 累计梯度
@@ -84,14 +97,11 @@ def main():
         print(f"set seed {seed}")
         util.set_seed(seed)
         for enc_name, enc_path in encs.items():
-            for pattern in params["pattern"]:
-                for data_path in params["data_path"]:
-                    print(f"seed: {seed}\n"
-                          f"enc_name: {enc_name}\n"
-                          f"pattern: {pattern}\n"
-                          f"data: {data_path}\n"
-                          f"batch_size: {params['batch_size']}\n"
-                          f"lr: {params['lr']}\n")
-                    train(seed, enc_name, enc_path, data_path, params, charge_desc)
+            for data_path in params["data_path"]:
+                print(f"enc_name: {enc_name}\n"
+                      f"data: {data_path}\n"
+                      f"batch_size: {params['batch_size']}\n"
+                      f"lr: {params['lr']}\n")
+                train(enc_name, enc_path, data_path, params, charge_desc)
 if __name__=="__main__":
     main()

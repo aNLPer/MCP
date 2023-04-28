@@ -131,29 +131,169 @@ class CEEE(nn.Module):
             positions.append(sents.view(-1, 768))
         return torch.stack(positions, dim=0)
 
-
 class Base(nn.Module):
     def __init__(self, model_path, lang, device):
         super(Base, self).__init__()
         self.device = device
         self.lang = lang
         self.enc = AutoModel.from_pretrained(model_path)
-
         self.pred = nn.Sequential(
             nn.Linear(768, int(0.5*768)),
             nn.ReLU(),
             nn.Linear(int(0.5*768), len(lang.index2charge))
         )
 
-    def forward(self, enc_input, mask_positions):
-        enc_input = {k: v.to(self.device) for k, v in enc_input.items()}
-        outputs = self.enc(**enc_input)['last_hidden_state']
-        # [sent_count, hidden_dim]
+    def forward(self, enc_fact, mask_positions):
+        enc_fact = {k: v.to(self.device) for k, v in enc_fact.items()}
+        enc_fact = self.enc(**enc_fact)['last_hidden_state']
         ts = []
         for idx in range(len(mask_positions)):
-            reps = torch.index_select(outputs[idx].squeeze(), 0, torch.tensor(mask_positions[idx]).to(self.device))
+            reps = torch.index_select(enc_fact[idx].squeeze(), 0, torch.tensor(mask_positions[idx]).to(self.device))
             ts.append(reps)
         ts = torch.concat(ts, dim=0)
         outputs = self.pred(ts)
         return outputs
 
+class BaseWP(nn.Module): # base with position
+    def __init__(self, model_path, lang, device):
+        super(BaseWP, self).__init__()
+        self.device = device
+        self.lang = lang
+        self.enc = AutoModel.from_pretrained(model_path)
+        self.pred = nn.Sequential(
+            nn.Linear(2*768, int(0.5*768)),
+            nn.ReLU(),
+            nn.Linear(int(0.5*768), len(lang.index2charge))
+        )
+
+    def forward(self, enc_fact, mask_positions, pad_sp_lens, dfd_positions):
+        enc_fact = {k: v.to(self.device) for k, v in enc_fact.items()}
+        enc_fact = self.enc(**enc_fact)['last_hidden_state']
+        enc_fact_sents = self.split_tensor(enc_fact, pad_sp_lens)
+        mask_rep = self.get_mask_tensors(enc_fact, mask_positions)
+        position_rep = self.get_dfd_position_rep(enc_fact_sents, dfd_positions)
+        combine_tensor = torch.concat([mask_rep, position_rep], dim=1)
+        outputs = self.pred(combine_tensor)
+        return outputs
+
+    def get_dfd_position_rep(self, fact, dfd_positions):
+        positions = []
+        for idx, indices in enumerate(dfd_positions):
+            sents = torch.index_select(fact[idx], 0, torch.tensor(indices).to(self.device))
+            # sents = sents.t().unsqueeze(dim=0)
+            # sents =  F.max_pool1d(sents, kernel_size=sents.shape[2],stride=2)
+            positions.append(sents.mean(dim=0, keepdim=True))
+        return torch.concat(positions, dim=0)
+
+    def split_tensor(self, input, pad_sp_lens):
+        max_len = max([len(s) for s in pad_sp_lens]) # 分割句子后填充
+        splited_tensor = []
+        for idx, sp_len in enumerate(pad_sp_lens):
+            # [sent_count, dim]
+            sample = torch.stack([torch.mean(i, dim=0) for i in torch.split(input[idx], sp_len)], 0)
+            splited_tensor.append(F.pad(sample, (0, 0, 0, max_len - sample.shape[0])))  # left,right,top,bottom
+        # [batch_size, max_len, dim]
+        return torch.stack(splited_tensor, dim=0)
+
+    def get_mask_tensors(self, enc_fact, mask_positions):
+        mask_tensors = []  # [MASK] tensor
+        for idx in range(enc_fact.shape[0]):
+            # 添加mask对应的tensor
+            mask_tensors.append(torch.unsqueeze(enc_fact[idx][mask_positions[idx]], dim=0))
+        return torch.concat(mask_tensors, dim=0)
+
+class BaseWE(nn.Module):
+    def __init__(self, model_path, lang, device):
+        super(BaseWE, self).__init__()
+        self.device = device
+        self.lang = lang
+        self.enc = AutoModel.from_pretrained(model_path)
+        self.pred = nn.Sequential(
+            nn.Linear(2*768, int(0.5*768)),
+            nn.ReLU(),
+            nn.Linear(int(0.5*768), len(lang.index2charge))
+        )
+
+    def forward(self, enc_fact, mask_positions, pad_sp_lens, dfd_positions):
+        enc_fact = {k: v.to(self.device) for k, v in enc_fact.items()}
+        enc_fact = self.enc(**enc_fact)['last_hidden_state']
+        enc_fact_sents = self.split_tensor(enc_fact, pad_sp_lens)
+        mask_rep = self.get_mask_tensors(enc_fact, mask_positions)
+        position_rep = self.get_dfd_position_rep(enc_fact_sents, dfd_positions)
+        combine_tensor = torch.concat([mask_rep, position_rep], dim=1)
+        outputs = self.pred(combine_tensor)
+        return outputs
+
+    def get_dfd_position_rep(self, fact, dfd_positions):
+        positions = []
+        for idx, indices in enumerate(dfd_positions):
+            sents = torch.index_select(fact[idx], 0, torch.tensor(indices).to(self.device))
+            # sents = sents.t().unsqueeze(dim=0)
+            # sents =  F.max_pool1d(sents, kernel_size=sents.shape[2],stride=2)
+            positions.append(sents.mean(dim=0, keepdim=True))
+        return torch.concat(positions, dim=0)
+
+    def split_tensor(self, input, pad_sp_lens):
+        max_len = max([len(s) for s in pad_sp_lens]) # 分割句子后填充
+        splited_tensor = []
+        for idx, sp_len in enumerate(pad_sp_lens):
+            # [sent_count, dim]
+            sample = torch.stack([torch.mean(i, dim=0) for i in torch.split(input[idx], sp_len)], 0)
+            splited_tensor.append(F.pad(sample, (0, 0, 0, max_len - sample.shape[0])))  # left,right,top,bottom
+        # [batch_size, max_len, dim]
+        return torch.stack(splited_tensor, dim=0)
+
+    def get_mask_tensors(self, enc_fact, mask_positions):
+        mask_tensors = []  # [MASK] tensor
+        for idx in range(enc_fact.shape[0]):
+            # 添加mask对应的tensor
+            mask_tensors.append(torch.unsqueeze(enc_fact[idx][mask_positions[idx]], dim=0))
+        return torch.concat(mask_tensors, dim=0)
+
+class BaseWEE(nn.Module):
+    def __init__(self, model_path, lang, device):
+        super(BaseWEE, self).__init__()
+        self.device = device
+        self.lang = lang
+        self.enc = AutoModel.from_pretrained(model_path)
+        self.pred = nn.Sequential(
+            nn.Linear(2 * 768, int(0.5 * 768)),
+            nn.ReLU(),
+            nn.Linear(int(0.5 * 768), len(lang.index2charge))
+        )
+
+    def forward(self, enc_fact, mask_positions, pad_sp_lens, dfd_positions):
+        enc_fact = {k: v.to(self.device) for k, v in enc_fact.items()}
+        enc_fact = self.enc(**enc_fact)['last_hidden_state']
+        enc_fact_sents = self.split_tensor(enc_fact, pad_sp_lens)
+        mask_rep = self.get_mask_tensors(enc_fact, mask_positions)
+        position_rep = self.get_dfd_position_rep(enc_fact_sents, dfd_positions)
+        combine_tensor = torch.concat([mask_rep, position_rep], dim=1)
+        outputs = self.pred(combine_tensor)
+        return outputs
+
+    def get_dfd_position_rep(self, fact, dfd_positions):
+        positions = []
+        for idx, indices in enumerate(dfd_positions):
+            sents = torch.index_select(fact[idx], 0, torch.tensor(indices).to(self.device))
+            # sents = sents.t().unsqueeze(dim=0)
+            # sents =  F.max_pool1d(sents, kernel_size=sents.shape[2],stride=2)
+            positions.append(sents.mean(dim=0, keepdim=True))
+        return torch.concat(positions, dim=0)
+
+    def split_tensor(self, input, pad_sp_lens):
+        max_len = max([len(s) for s in pad_sp_lens])  # 分割句子后填充
+        splited_tensor = []
+        for idx, sp_len in enumerate(pad_sp_lens):
+            # [sent_count, dim]
+            sample = torch.stack([torch.mean(i, dim=0) for i in torch.split(input[idx], sp_len)], 0)
+            splited_tensor.append(F.pad(sample, (0, 0, 0, max_len - sample.shape[0])))  # left,right,top,bottom
+        # [batch_size, max_len, dim]
+        return torch.stack(splited_tensor, dim=0)
+
+    def get_mask_tensors(self, enc_fact, mask_positions):
+        mask_tensors = []  # [MASK] tensor
+        for idx in range(enc_fact.shape[0]):
+            # 添加mask对应的tensor
+            mask_tensors.append(torch.unsqueeze(enc_fact[idx][mask_positions[idx]], dim=0))
+        return torch.concat(mask_tensors, dim=0)

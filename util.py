@@ -1,6 +1,6 @@
 import torch
 import json
-import numpy as np
+from model import Base, BaseWP
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 
 def set_seed(seed:int):
@@ -31,7 +31,10 @@ def evaluate(lang, model, epoch, data_loader, report_file, prefix, mode):
         y_trues = []
         y_preds = []
         for ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions in data_loader:
-            pred_score = model(enc_inputs, mask_positions)
+            if isinstance(model, Base):
+                pred_score = model(enc_inputs, mask_positions) #enc_desc=enc_desc,pad_sp_lens=pad_sp_lens,
+            if isinstance(model, BaseWP):
+                pred_score = model(enc_inputs, pad_sp_lens, mask_positions, dfd_positions)
             pred = pred_score.argmax(dim=1).cpu().tolist()
             y_preds.extend(pred)
             y_trues.extend(charge_idxs)
@@ -73,4 +76,5 @@ def acc_case_level(logits):
         if pred == true:
             right_case+=1
     return round(right_case/case_num,2)
+
 
