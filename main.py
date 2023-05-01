@@ -4,7 +4,6 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import util
 from preprocess import Processor
 from model import Base, BaseWP, BaseWE, BaseWEE
-import argparse
 import setting
 import torch
 import torch.nn as nn
@@ -15,8 +14,17 @@ from torch.utils.data import DataLoader
 from transformers import get_cosine_with_hard_restarts_schedule_with_warmup
 transformers.logging.set_verbosity_error()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+params = setting.params
+encs = setting.encs
+charge_desc = setting.charge_desc
+cate2charge = setting.cate2charge
+charge2cate = {}
+for cate, charges in cate2charge.items():
+    for c in charges:
+        charge2cate[c] = cate
 
-def train(seed, enc_name, enc_path, model_name, data_path, params, charge_desc):
+
+def train(seed, enc_name, enc_path, model_name, data_path, params):
     print("preparing dataset...")
     train_path, dev_path, test_path = f"./datasets/{data_path}/train.json",f"./datasets/{data_path}/dev.json",f"./datasets/{data_path}/test.json"
     lang = Lang(train_path)
@@ -86,14 +94,11 @@ def train(seed, enc_name, enc_path, model_name, data_path, params, charge_desc):
             scheduler.step()
         print(f"train_loss:{round(train_loss/len(train_data_loader.dataset), 4)}")
         # torch.save(model, f"./outputs/models/{prefix}.pkl")
-        util.evaluate(lang, model, epoch, dev_data_loader, dev_report_file, model_id, mode="dev")
-        util.evaluate(lang, model, epoch, test_data_loader, test_report_file, model_id, mode="test")
+        util.evaluate(lang, model, epoch, dev_data_loader, dev_report_file, model_id, charge2cate, mode="dev")
+        util.evaluate(lang, model, epoch, test_data_loader, test_report_file, model_id, charge2cate, mode="test")
 
 def main():
     print("Running ...")
-    params = setting.params
-    encs = setting.encs
-    charge_desc = setting.charge_desc
     for seed in params["seeds"][:5]:
         print(f"set seed {seed}")
         util.set_seed(seed)
@@ -105,6 +110,8 @@ def main():
                           f"data: {data_path}\n"
                           f"batch_size: {params['batch_size']}\n"
                           f"lr: {params['lr']}\n")
-                    train(seed, enc_name, enc_path, model_name, data_path, params, charge_desc)
+                    train(seed, enc_name, enc_path, model_name, data_path, params)
+
+
 if __name__=="__main__":
     main()
