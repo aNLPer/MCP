@@ -214,24 +214,28 @@ class BaseWE(nn.Module):
             nn.Linear(int(0.5*768), len(lang.index2charge))
         )
 
-    def forward(self, enc_fact, mask_positions, pad_sp_lens, dfd_positions):
+    def forward(self, enc_fact, mask_positions, pad_sp_lens, relevant_sents):
         enc_fact = {k: v.to(self.device) for k, v in enc_fact.items()}
         enc_fact = self.enc(**enc_fact)['last_hidden_state']
         enc_fact_sents = self.split_tensor(enc_fact, pad_sp_lens)
         mask_rep = self.get_mask_tensors(enc_fact, mask_positions)
-        position_rep = self.get_dfd_position_rep(enc_fact_sents, dfd_positions)
-        combine_tensor = torch.concat([mask_rep, position_rep], dim=1)
+        elem_rep = self.get_elem_rep(enc_fact_sents, relevant_sents)
+        combine_tensor = torch.concat([mask_rep, elem_rep], dim=1)
         outputs = self.pred(combine_tensor)
         return outputs
 
-    def get_dfd_position_rep(self, fact, dfd_positions):
-        positions = []
-        for idx, indices in enumerate(dfd_positions):
-            sents = torch.index_select(fact[idx], 0, torch.tensor(indices).to(self.device))
-            # sents = sents.t().unsqueeze(dim=0)
-            # sents =  F.max_pool1d(sents, kernel_size=sents.shape[2],stride=2)
-            positions.append(sents.mean(dim=0, keepdim=True))
-        return torch.concat(positions, dim=0)
+    def get_elem_rep(self, fact, relevant_sents):
+        sent_ids = []
+        for d in relevant_sents:
+            temp = []
+            for key, val in d.items():
+                temp.extend(val)
+            sent_ids.append(list(set(temp)))
+        relevant_tensors = []
+        for idx, indices in enumerate(sent_ids):
+            tensors = torch.index_select(fact[idx], 0, torch.tensor(indices).to(self.device))
+            relevant_tensors.append(tensors.mean(dim=0, keepdim=True))
+        return torch.concat(relevant_tensors, dim=0)
 
     def split_tensor(self, input, pad_sp_lens):
         max_len = max([len(s) for s in pad_sp_lens]) # 分割句子后填充

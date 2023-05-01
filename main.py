@@ -16,7 +16,7 @@ from transformers import get_cosine_with_hard_restarts_schedule_with_warmup
 transformers.logging.set_verbosity_error()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def train(enc_name, enc_path, data_path, params, charge_desc):
+def train(seed, enc_name, enc_path, model_name, data_path, params, charge_desc):
     print("preparing dataset...")
     train_path, dev_path, test_path = f"./datasets/{data_path}/train.json",f"./datasets/{data_path}/dev.json",f"./datasets/{data_path}/test.json"
     lang = Lang(train_path)
@@ -34,11 +34,11 @@ def train(enc_name, enc_path, data_path, params, charge_desc):
     test_data_loader = DataLoader(dataset_test, batch_size=params['batch_size'], collate_fn=dataset_test.collate_fn, shuffle=False)
 
     print("creating model...")
-    if params['model_name'] == "Base":
+    if model_name == "Base":
         model = Base(enc_path, lang, device)
-    if params['model_name'] == "BaseWP":
+    if model_name == "BaseWP":
         model = BaseWP(enc_path, lang, device)
-    if params['model_name'] == "BaseWE":
+    if model_name == "BaseWE":
         model = BaseWE(enc_path, lang, device)
     model.to(device)
     # 定义损失函数，优化器，学习率调整器
@@ -52,13 +52,12 @@ def train(enc_name, enc_path, data_path, params, charge_desc):
                                                                    num_cycles=1)
     print("training model...")
     from tqdm import tqdm
-    model_id = f"{enc_name}_{params['model_name']}_{data_path}"
-    dev_report_file = open(f"./outputs/reports/{model_id}_dev.txt", "w",
-                           encoding="utf-8")  # 记录模型分类报告
-    test_report_file = open(f"./outputs/reports/{model_id}_test.txt", "w",
-                            encoding="utf-8")  # 记录模型分类报告
+    model_id = f"{seed}_{enc_name}_{model_name}_{data_path}" # enc_name_model_name_data_name
+    dev_report_file = open(f"./outputs/reports/{model_id}_dev.txt", "w", encoding="utf-8")  # 记录模型分类报告
+    test_report_file = open(f"./outputs/reports/{model_id}_test.txt", "w", encoding="utf-8")  # 记录模型分类报告
     for epoch in range(params['epoch']):
-        print(f"-------------------------------epoch:{epoch + 1}-------------------------------------")
+        sp = f"-------------------------------epoch:{epoch + 1}-------------------------------------"
+        print(sp)
         model.train()
         train_loss = 0
         for ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions in tqdm(train_data_loader):
@@ -71,7 +70,7 @@ def train(enc_name, enc_path, data_path, params, charge_desc):
             if isinstance(model, BaseWE): # add anno Elem
                 charge_scores = model(enc_inputs, mask_positions, pad_sp_lens, relevant_sents)
             if isinstance(model, BaseWEE): # add Ext Elem
-                charge_scores = model(enc_inputs, mask_positions, pad_sp_lens, relevant_sents)
+                charge_scores = model(enc_inputs, mask_positions, pad_sp_lens)
             loss = criterion(charge_scores, torch.tensor(charge_idxs).to(device))
             train_loss+=loss.item()
             # 累计梯度
@@ -84,7 +83,9 @@ def train(enc_name, enc_path, data_path, params, charge_desc):
             scheduler.step()
         print(f"train_loss:{round(train_loss/len(train_data_loader.dataset), 4)}")
         # torch.save(model, f"./outputs/models/{prefix}.pkl")
+        dev_report_file.write(sp+"\n")
         util.evaluate(lang, model, epoch, dev_data_loader, dev_report_file, model_id, mode="dev")
+        test_report_file.write(sp+"\n")
         util.evaluate(lang, model, epoch, test_data_loader, test_report_file, model_id, mode="test")
 
 def main():
@@ -92,15 +93,17 @@ def main():
     params = setting.params
     encs = setting.encs
     charge_desc = setting.charge_desc
-    for seed in params["seeds"][:1]:
+    for seed in params["seeds"][:5]:
         print(f"set seed {seed}")
         util.set_seed(seed)
         for enc_name, enc_path in encs.items():
             for data_path in params["data_path"]:
-                print(f"enc_name: {enc_name}\n"
-                      f"data: {data_path}\n"
-                      f"batch_size: {params['batch_size']}\n"
-                      f"lr: {params['lr']}\n")
-                train(enc_name, enc_path, data_path, params, charge_desc)
+                for model_name in params["model_name"]:
+                    print(f"enc_name: {enc_name}\n"
+                          f"model_name: {model_name}\n"
+                          f"data: {data_path}\n"
+                          f"batch_size: {params['batch_size']}\n"
+                          f"lr: {params['lr']}\n")
+                    train(seed, enc_name, enc_path, model_name, data_path, params, charge_desc)
 if __name__=="__main__":
     main()

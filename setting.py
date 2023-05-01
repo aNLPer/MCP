@@ -21,8 +21,8 @@ charge_desc = {"掩饰、隐瞒犯罪所得罪":"明知是犯罪所得，而予�
                 "介绍卖淫罪":"为卖淫的人与嫖客牵线搭桥的行为",
                 "招摇撞骗罪":"为谋取非法利益，假冒国家机关工作人员的身份或职称，进行诈骗，损害国家机关的威信及其正常活动的行为"}
 
-encs = {"roberta_wwm":"./pretrained_files/roberta_wwm",
-        "lawbert":"./pretrained_files/lawbert"}
+encs = {"roberta_wwm":"./pretrained_files/roberta_wwm"}
+        # "lawbert":"./pretrained_files/lawbert"}
         # "roberta":"./pretrained_files/roberta",
         # "albert":"./pretrained_files/albert",
         # "lawformer":"thunlp/Lawformer",
@@ -32,7 +32,7 @@ encs = {"roberta_wwm":"./pretrained_files/roberta_wwm",
 params = {"epoch":20,
           "batch_size":4,
           "lr":0.00005,
-          "model_name":"BaseWP",  #"BaseWE" "BaseWEE" "Base"
+          "model_name":["BaseWE","BaseWEE"], # "Base","BaseWP",
           "data_path":["hard", "easy", "all"],
           "pattern":["all"],# "act", "res", "sub"
           "seeds":[80,19, 23, 94, 13, 0, 7, 47, 21, 81]

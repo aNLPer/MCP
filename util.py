@@ -34,7 +34,7 @@ def evaluate(lang, model, epoch, data_loader, report_file, prefix, mode):
             if isinstance(model, Base):
                 pred_score = model(enc_inputs, mask_positions) #enc_desc=enc_desc,pad_sp_lens=pad_sp_lens,
             if isinstance(model, BaseWP):
-                pred_score = model(enc_inputs, pad_sp_lens, mask_positions, dfd_positions)
+                pred_score = model(enc_inputs, mask_positions, pad_sp_lens, dfd_positions)
             pred = pred_score.argmax(dim=1).cpu().tolist()
             y_preds.extend(pred)
             y_trues.extend(charge_idxs)
