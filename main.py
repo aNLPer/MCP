@@ -65,14 +65,13 @@ def train(enc_name, enc_path, data_path, params, charge_desc):
             # 梯度置零
             optimizer.zero_grad()
             if isinstance(model, Base): # baseline
-                charge_scores = model(enc_inputs, mask_positions) #enc_desc=enc_desc,pad_sp_lens=pad_sp_lens,
+                charge_scores = model(enc_inputs, mask_positions)
             if isinstance(model, BaseWP): # add dfd position
                 charge_scores = model(enc_inputs, mask_positions, pad_sp_lens, dfd_positions)
             if isinstance(model, BaseWE): # add anno Elem
                 charge_scores = model(enc_inputs, mask_positions, pad_sp_lens, relevant_sents)
-            if isinstance(model, BaseWEE):
+            if isinstance(model, BaseWEE): # add Ext Elem
                 charge_scores = model(enc_inputs, mask_positions, pad_sp_lens, relevant_sents)
-
             loss = criterion(charge_scores, torch.tensor(charge_idxs).to(device))
             train_loss+=loss.item()
             # 累计梯度
