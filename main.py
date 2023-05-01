@@ -40,6 +40,9 @@ def train(seed, enc_name, enc_path, model_name, data_path, params, charge_desc):
         model = BaseWP(enc_path, lang, device)
     if model_name == "BaseWE":
         model = BaseWE(enc_path, lang, device)
+    if model_name == "BaseWEE":
+        ee_path = f"./pretrained_files/EE/roberta_wwm_80_{data_path}.pkl"
+        model = BaseWEE(enc_path, ee_path, lang, device)
     model.to(device)
     # 定义损失函数，优化器，学习率调整器
     criterion = nn.CrossEntropyLoss()
@@ -83,9 +86,7 @@ def train(seed, enc_name, enc_path, model_name, data_path, params, charge_desc):
             scheduler.step()
         print(f"train_loss:{round(train_loss/len(train_data_loader.dataset), 4)}")
         # torch.save(model, f"./outputs/models/{prefix}.pkl")
-        dev_report_file.write(sp+"\n")
         util.evaluate(lang, model, epoch, dev_data_loader, dev_report_file, model_id, mode="dev")
-        test_report_file.write(sp+"\n")
         util.evaluate(lang, model, epoch, test_data_loader, test_report_file, model_id, mode="test")
 
 def main():

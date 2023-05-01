@@ -44,7 +44,7 @@ def evaluate(lang, model, epoch, data_loader, report_file, prefix, mode):
         precision = precision_score(y_true=y_trues, y_pred=y_preds, average="macro")
         recall = recall_score(y_true=y_trues, y_pred=y_preds, average="macro")
         f1 = f1_score(y_true=y_trues, y_pred=y_preds, average="macro")
-        report_file.write(f"--------------------------------{epoch}-------------------------------\n")
+        report_file.write(f"--------------------------------epoch：{epoch}-------------------------------\n")
         report_file.write(classification_report(y_true=y_trues, y_pred=y_preds))
         report_file.write(f"acc: {round(acc, 2)}   precision: {round(precision, 2)} recall: {round(recall, 2)}   f1: {round(f1, 2)}, acc_: {acc_}\n")
         print(f"acc: {round(acc, 2)}   precision: {round(precision, 2)} recall: {round(recall, 2)}   f1: {round(f1, 2)}, acc_: {acc_}")

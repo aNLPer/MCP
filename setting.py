@@ -32,7 +32,7 @@ encs = {"roberta_wwm":"./pretrained_files/roberta_wwm"}
 params = {"epoch":20,
           "batch_size":4,
           "lr":0.00005,
-          "model_name":["BaseWE","BaseWEE"], # "Base","BaseWP",
+          "model_name":["BaseWEE"], # "Base","BaseWP","BaseWE",
           "data_path":["hard", "easy", "all"],
           "pattern":["all"],# "act", "res", "sub"
           "seeds":[80,19, 23, 94, 13, 0, 7, 47, 21, 81]

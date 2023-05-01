@@ -255,49 +255,68 @@ class BaseWE(nn.Module):
         return torch.concat(mask_tensors, dim=0)
 
 class BaseWEE(nn.Module):
-    def __init__(self, model_path, lang, device):
+    def __init__(self, enc_path, ee_path, lang, device,):
         super(BaseWEE, self).__init__()
         self.device = device
         self.lang = lang
-        self.enc = AutoModel.from_pretrained(model_path)
-        self.pred = nn.Sequential(
-            nn.Linear(2 * 768, int(0.5 * 768)),
+        self.charge_enc = AutoModel.from_pretrained(enc_path)  # charge prediction
+        self.elem_enc = torch.load(ee_path).to(device)  # elements extract
+        self.elem_enc.eval()
+        self.charge_pred = nn.Sequential(
+            nn.Linear(2 * 768, 768),
             nn.ReLU(),
-            nn.Linear(int(0.5 * 768), len(lang.index2charge))
+            nn.Linear(768, 384),
+            nn.ReLU(),
+            nn.Linear(384, len(self.lang.index2charge))
         )
 
-    def forward(self, enc_fact, mask_positions, pad_sp_lens, dfd_positions):
+    def forward(self, enc_fact, mask_positions, pad_sp_lens):
         enc_fact = {k: v.to(self.device) for k, v in enc_fact.items()}
-        enc_fact = self.enc(**enc_fact)['last_hidden_state']
-        enc_fact_sents = self.split_tensor(enc_fact, pad_sp_lens)
-        mask_rep = self.get_mask_tensors(enc_fact, mask_positions)
-        position_rep = self.get_dfd_position_rep(enc_fact_sents, dfd_positions)
-        combine_tensor = torch.concat([mask_rep, position_rep], dim=1)
-        outputs = self.pred(combine_tensor)
-        return outputs
+        # elements extraction
+        with torch.no_grad():
+            elem_score = self.elem_enc(enc_fact, pad_sp_lens)
+            elem_score = elem_score.view(len(pad_sp_lens), -1, 2)  # [batch_size, sent_num, 2]
+        # encoding and split case at sent level
+        enc_fact = self.charge_enc(**enc_fact)['last_hidden_state']  # [batch_size, seq_len, hidden_dim]
+        enc_fact_sent = self.split_tensor(enc_fact, pad_sp_lens)  # [batch_size, sent_count, dim]
+        # select mask corr tensor；
+        mask_tensors = self.select_mask_tensor(enc_fact_sent, mask_positions)  # [batch_size, dim]
+        # get sum of sent rep which is relevant with elements
+        element_tensors, _ = self.select_element_tensor(elem_score, enc_fact_sent)  # [batch_size, dim]
+        combine_tensor = torch.concat([mask_tensors, element_tensors], dim=1)
+        # predict charge
+        score = self.charge_pred(combine_tensor)  # [batch_size, charge_num]
+        return score
 
-    def get_dfd_position_rep(self, fact, dfd_positions):
-        positions = []
-        for idx, indices in enumerate(dfd_positions):
-            sents = torch.index_select(fact[idx], 0, torch.tensor(indices).to(self.device))
-            # sents = sents.t().unsqueeze(dim=0)
-            # sents =  F.max_pool1d(sents, kernel_size=sents.shape[2],stride=2)
-            positions.append(sents.mean(dim=0, keepdim=True))
-        return torch.concat(positions, dim=0)
+    def select_mask_tensor(self, input, mask_positions):
+        mask_tensors = []  # [MASK] tensor
+        for idx in range(input.shape[0]):
+            # add [mask] tensor
+            mask_tensors.append(input[idx][mask_positions[idx]])
+        return torch.stack(mask_tensors, dim=0)
+
+    def select_element_tensor(self, elem_score, enc_fact_sent):
+        select_idxs = elem_score.argmax(dim=2).cpu().tolist()
+        indices = []
+        for idxs in select_idxs:
+            idx = [idx for idx, val in enumerate(idxs) if val == 1]
+            indices.append(idx)
+        element_tensors = []
+        for i in range(elem_score.shape[0]):
+            if len(indices[i]) == 0:
+                temp = torch.randn((1, 768)).to(self.device)
+            else:
+                temp = torch.index_select(enc_fact_sent[i], dim=0, index=torch.tensor(indices[i]).to(self.device))
+            # temp = F.pad(temp, (0, 0, 0, max_len_indice-temp.shape[0]))#left,right,top,bottom
+            element_tensors.append(torch.mean(temp, dim=0))
+        return torch.stack(element_tensors, dim=0), indices
 
     def split_tensor(self, input, pad_sp_lens):
-        max_len = max([len(s) for s in pad_sp_lens])  # 分割句子后填充
+        max_len = max([len(s) for s in pad_sp_lens])
         splited_tensor = []
         for idx, sp_len in enumerate(pad_sp_lens):
             # [sent_count, dim]
-            sample = torch.stack([torch.mean(i, dim=0) for i in torch.split(input[idx], sp_len)], 0)
+            sample = torch.stack([torch.sum(i, dim=0) for i in torch.split(input[idx], sp_len)], 0)
             splited_tensor.append(F.pad(sample, (0, 0, 0, max_len - sample.shape[0])))  # left,right,top,bottom
-        # [batch_size, max_len, dim]
+        # [batch_size,sent_count, dim]
         return torch.stack(splited_tensor, dim=0)
-
-    def get_mask_tensors(self, enc_fact, mask_positions):
-        mask_tensors = []  # [MASK] tensor
-        for idx in range(enc_fact.shape[0]):
-            # 添加mask对应的tensor
-            mask_tensors.append(torch.unsqueeze(enc_fact[idx][mask_positions[idx]], dim=0))
-        return torch.concat(mask_tensors, dim=0)
