@@ -1,6 +1,6 @@
 import torch
 import json
-from model import Base, BaseWP, BaseWE, BaseWEE
+from model import Base, BaseWP, BaseWE, BaseWEE, MyModel
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 
 def set_seed(seed:int):
@@ -32,7 +32,7 @@ def evaluate(lang, model, epoch, data_loader, report_file, prefix, charge2cate, 
         y_preds = []
         y_trues_up = []
         y_preds_up = []
-        for ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions in data_loader:
+        for ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, cate_idxs, grouped_cate_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions in data_loader:
             if isinstance(model, Base): # baseline
                 pred_score = model(enc_inputs, mask_positions) #enc_desc=enc_desc,pad_sp_lens=pad_sp_lens,
             if isinstance(model, BaseWP): # add position
@@ -41,6 +41,8 @@ def evaluate(lang, model, epoch, data_loader, report_file, prefix, charge2cate, 
                 pred_score = model(enc_inputs, mask_positions, pad_sp_lens, relevant_sents)
             if isinstance(model, BaseWEE): # add Ext Elem
                 pred_score = model(enc_inputs, mask_positions, pad_sp_lens)
+            if isinstance(model, MyModel):
+                _, pred_score = model(enc_inputs, enc_desc, mask_positions, pad_sp_lens, dfd_positions)
             pred = pred_score.argmax(dim=1).cpu().tolist()
             y_preds.extend(pred)
             y_preds_up.extend([charge2cate[lang.index2charge[p]] for p in pred])

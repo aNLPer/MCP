@@ -3,7 +3,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 import util
 from preprocess import Processor
-from model import Base, BaseWP, BaseWE, BaseWEE
+from model import Base, BaseWP, BaseWE, BaseWEE, MyModel
 import setting
 import torch
 import torch.nn as nn
@@ -18,20 +18,13 @@ params = setting.params
 encs = setting.encs
 charge_desc = setting.charge_desc
 cate2charge = setting.cate2charge
-charge2cate = {}
-for cate, charges in cate2charge.items():
-    for c in charges:
-        charge2cate[c] = cate
+
 
 
 def train(seed, enc_name, enc_path, model_name, data_path, params):
     print("preparing dataset...")
     train_path, dev_path, test_path = f"./datasets/{data_path}/train.json",f"./datasets/{data_path}/dev.json",f"./datasets/{data_path}/test.json"
-    lang = Lang(train_path)
-    # 去除数据集中不存在得charge
-    d = list(set(charge_desc.keys()).difference(set(lang.index2charge)))
-    if len(d)>0:
-        charge_desc.pop(d[0])
+    lang = Lang(train_path, charge_desc, cate2charge)
     processor = Processor(lang)
     train_data, dev_data, test_data = processor.load_data(train_path), processor.load_data(dev_path), processor.load_data(test_path)
     dataset_train = ClozeDataset(train_data, enc_path, lang, charge_desc)
@@ -51,6 +44,9 @@ def train(seed, enc_name, enc_path, model_name, data_path, params):
     if model_name == "BaseWEE":
         ee_path = f"./pretrained_files/EE/roberta_wwm_80_{data_path}.pkl"
         model = BaseWEE(enc_path, ee_path, lang, device)
+    if model_name == "MyModel":
+        ee_path = f"./pretrained_files/EE/roberta_wwm_80_{data_path}.pkl"
+        model = MyModel(enc_path, ee_path, lang, device)
     model.to(device)
     # 定义损失函数，优化器，学习率调整器
     criterion = nn.CrossEntropyLoss()
@@ -71,7 +67,7 @@ def train(seed, enc_name, enc_path, model_name, data_path, params):
         print(sp)
         model.train()
         train_loss = 0
-        for ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions in tqdm(train_data_loader):
+        for ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, cate_idxs, grouped_cate_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions in tqdm(train_data_loader):
             # 梯度置零
             optimizer.zero_grad()
             if isinstance(model, Base): # baseline
@@ -82,7 +78,11 @@ def train(seed, enc_name, enc_path, model_name, data_path, params):
                 charge_scores = model(enc_inputs, mask_positions, pad_sp_lens, relevant_sents)
             if isinstance(model, BaseWEE): # add Ext Elem
                 charge_scores = model(enc_inputs, mask_positions, pad_sp_lens)
-            loss = criterion(charge_scores, torch.tensor(charge_idxs).to(device))
+            if isinstance(model, MyModel): # add Ext Elem
+                group_scores, charge_scores = model(enc_inputs, enc_desc, mask_positions, pad_sp_lens, dfd_positions)
+            c_loss = criterion(charge_scores, torch.tensor(charge_idxs).to(device))
+            g_loss = criterion(group_scores, torch.tensor(cate_idxs).to(device))
+            loss = c_loss+g_loss
             train_loss+=loss.item()
             # 累计梯度
             loss.backward()
@@ -94,8 +94,8 @@ def train(seed, enc_name, enc_path, model_name, data_path, params):
             scheduler.step()
         print(f"train_loss:{round(train_loss/len(train_data_loader.dataset), 4)}")
         # torch.save(model, f"./outputs/models/{prefix}.pkl")
-        util.evaluate(lang, model, epoch, dev_data_loader, dev_report_file, model_id, charge2cate, mode="dev")
-        util.evaluate(lang, model, epoch, test_data_loader, test_report_file, model_id, charge2cate, mode="test")
+        util.evaluate(lang, model, epoch, dev_data_loader, dev_report_file, model_id, lang.charge2cate, mode="dev")
+        util.evaluate(lang, model, epoch, test_data_loader, test_report_file, model_id, lang.charge2cate, mode="test")
 
 def main():
     print("Running ...")

@@ -5,10 +5,24 @@ from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
 class Lang:
-    def __init__(self, data_path):
+    def __init__(self, data_path, charge_desc, cate2charge):
+        self.cate2charge = cate2charge
+        self.charge2cate = {}
+        for cate, charges in self.cate2charge.items():
+            for c in charges:
+                self.charge2cate[c] = cate
+        self.index2cate = list(self.cate2charge.keys())
+        self.cate2index = {cate: idx for idx, cate in enumerate(self.index2cate)}
+
         self.index2charge = []
         self.charge2index = None
         self.stat(data_path)
+
+        # # 去除数据集中不存在得charge
+        # diff_charge = list(set(charge_desc.keys()).difference(set(self.index2charge)))
+        # for d in diff_charge:
+        #     charge_desc.pop(d)
+        self.charge2desc = charge_desc
 
     def stat(self, data_path):
         # 统计标签
@@ -19,9 +33,6 @@ class Lang:
                 for c in charges:
                     if c not in self.index2charge:
                         self.index2charge.append(c)
-        self._update_label2index()
-
-    def _update_label2index(self):
         self.charge2index = {charge: idx for idx, charge in enumerate(self.index2charge)}
 
 class ClozeDataset(Dataset):
@@ -48,6 +59,7 @@ class ClozeDataset(Dataset):
         grouped_dfds = []  # 每个case涉及的被告人
         charge_idxs = []  # 指控索引
         grouped_charge_idxs = []  # 每个case涉及的指控索引
+        grouped_cate_idxs = []
         pad_sp_lens = [] # 分割
         relevant_sents = []# 相关句子[{"subjective":[], "act":[], "res":[]}]
         mask_positions = [] # 掩码位置
@@ -92,7 +104,10 @@ class ClozeDataset(Dataset):
         for sp_len in pad_sp_lens:
             if sum(sp_len)<pad_len:
                 sp_len[-1]+=pad_len-sum(sp_len)
-        return ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions
+        cate_idxs = [self.lang.cate2index[self.lang.charge2cate[self.lang.index2charge[c]]] for c in charge_idxs]
+        for idxs in grouped_charge_idxs:
+            grouped_cate_idxs.append([self.lang.cate2index[self.lang.charge2cate[self.lang.index2charge[c]]] for c in idxs])
+        return ids, inputs, enc_inputs, enc_desc, dfds, grouped_dfds, charge_idxs, grouped_charge_idxs, cate_idxs, grouped_cate_idxs, sent_lens, pad_sp_lens, relevant_sents, mask_positions, dfd_positions
 
     def get_dfd_rel(self, grouped_relevant_sents):
         dfds_rel = []
@@ -119,6 +134,6 @@ class ClozeDataset(Dataset):
         return positions
 
     def get_charge_desc(self):
-        descs = [d for _,d in self.charge_desc.items()]
+        descs = [self.charge_desc[c] for c in self.lang.index2charge]
         enc_descs = self.tokenizer(descs, truncation=True, max_length=512, return_tensors="pt", padding=True, add_special_tokens=False)
         return enc_descs
