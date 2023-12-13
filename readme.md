@@ -1,10 +1,10 @@
-# LEVEN
-Dataset and source code for ACL 2022 Findings paper ["LEVEN: A Large-Scale Chinese Legal Event Detection Dataset" ](https://aclanthology.org/2022.findings-acl.17.pdf).
+# Crime-Element-Informed Multi-Defendant Charge Prediction: Dataset and Modeling
+
 
 ## Background
-Events are the essence of the facts in legal cases. Therefore, Legal Event Detection (LED) is fundamentally important and naturally beneficial to case understanding and other Legal AI tasks.
+The charge prediction task aims to automatically recommend charges for each defendant given a fact description
 
-![bg](./pic/bg.jpg)
+![bg](./pic/fig-1.png)
 
 
 ## Overview
