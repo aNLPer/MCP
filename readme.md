@@ -1,91 +1,61 @@
 # Crime-Element-Informed Multi-Defendant Charge Prediction: Dataset and Modeling
 
 
-## Background
-The charge prediction task aims to automatically recommend charges for each defendant given a fact description
-
-![bg](./pic/fig-1.png)
-
-
 ## Overview
+The charge prediction task aims to automatically recommend charges for each defendant given a fact description. We introduce a new dataset (named MELEE) containing multi-defendant legal cases with criminal elements annotations. Furthermore, based on MELEE, we propose a model named EJudge. It predicts charges by using extracted criminal elements while following legal rules, which provide a clear and justifiable rationale.
 
-The dataset can be obtained from [Tsinghua Cloud](https://thunlp.oss-cn-qingdao.aliyuncs.com/LEVEN/LEVEN.zip) or [Google Drive](https://drive.google.com/drive/folders/1VGD0h365kegTqGEyLr24SJtJUUoZIt20?usp=sharing). The annotation guidelines are provided in [Annotation Guidelines](./Annotation-Guidelines). 
-You can also check out our [poster](./poster/LEVEN-poster.pdf) at ACL2022 main conference.
+<img src="./pic/fig-1.png">
+<!-- ![bg](./pic/fig-1.png) -->
 
-We remove the annotations for the test set deliberately. To get the results on LEVEN test set, please refer to [Leaderboard](#Leaderboard).
+## Dataset
+Our dataset MELEE considers multi-defendant legal case and we annotate four types of criminal element for each defendant.
+
+### Multiple Defendant
+Our dataset MELEE comprises 2865 legal cases with an average of 2.5 defendants per case. Here is a comparison between the MELEE and other datasets. 
+
+![tab1](./pic/fig-2.png)
 
 
-### Large Scale
+### Annotation Example
+we ask three legal experts to annotate four types of criminal element for each defendant. Here is an annotation example.
+![tab2](./pic/fig-4.png)
 
-LEVEN is the largest Legal Event Detection dataset and the largest Chinese Event Detection dataset. Here is a comparison between the scale of LEVEN and other datasets. 
+### Annotation Scale
 
-![tab1](./pic/tab1.jpg)
-
-Datasets denoted with * are not publicly available, and – means the value is not accessible
-
-### High Coverage
-
-LEVEN contains 108 event types in total, including 64 charge-oriented events and 44 general events. Their distribution is shown below.
-
-![tab2](./pic/tab2.jpg)
-
-The LEVEN event schema has a sophisticated hierarchical structure, which is shown [here](#Schema).  
-
-## Leaderboard
-
-LEVEN is adopted for [CAIL 2022](http://cail.cipsc.org.cn/index.html), the most influential Legal AI contest in China. 
-
-You can submit your predictions to [CAIL Event Detection Track](http://cail.cipsc.org.cn/task1.html?raceID=1&cail_tag=2022) to win a prize up to CNY 15,000!
-
-Please follow submission instructions [here](https://github.com/china-ai-law-challenge/CAIL2022/tree/main/sjjc#%E6%8F%90%E4%BA%A4%E7%9A%84%E6%96%87%E4%BB%B6%E6%A0%BC%E5%BC%8F%E5%8F%8A%E7%BB%84%E7%BB%87%E5%BD%A2%E5%BC%8F).
+As far as we know, our dataset MELEE provides the largest fine-grained annotation scale for the charge prediction task.Here is a comparison between the MELEE and other datasets with fine-grained annotation. 
+![tab2](./pic/fig-3.png)
 
 
 ## Experiments
 
-The source codes for the experiments are included in the [Baselines](./Baselines) and [Downstreams](./Downstreams) folder.
-
-* The Baselines folder includes [DMCNN](./Baselines/DMCNN), [BiLSTM](./Baselines/BiLSTM), [BiLSTM+CRF](./Baselines/BiLSTM+CRF), [BERT](./Baselines/BERT), [BERT+CRF](./Baselines/BERT+CRF) and [DMBERT](./Baselines/DMBERT).
-
-* The Downstreams folder includes [Legal Judgment Prediction](./Downstreams/LJP) and [Similar Case Retrieval](./Downstreams/SCR).
+### Our Method
+we propose a crime-element-informed charge prediction model named EJudge which consists of four components: the Element Selector, the Category Selector, the Rule Selector, and the Verifier.
+![tab2](./pic/fig-5.png)
 
 ### Baselines
+We implement eleven competitive Baselines：[DPAM](https://www.yongfeng.me/attach/wang-sigir18.pdf),[MSA](https://link.springer.com/chapter/10.1007/978-981-15-1377-0_59),
+[CECP](https://www.ijcai.org/proceedings/2022/0627.pdf),[DCSCP](https://link.springer.com/article/10.1007/s11280-021-00873-8),[HMN](https://dl.acm.org/doi/abs/10.1145/3331184.3331223),[NeurJudge](https://dl.acm.org/doi/abs/10.1145/3404835.3462826),[CTM]([./Baselines](https://aclanthology.org/2022.coling-1.235/)),[Chinese RoBERTa](https://ieeexplore.ieee.org/abstract/document/9599397),[LegalBERT](https://doi.org/10.18653/v1/2020.findings-emnlp.261),[LawFormer](https://aclanthology.org/2020.coling-main.88/)
 
-We implement six competitive [Baselines](./Baselines) and their performances are as follows.
+### Training Configurations
+Moreover, we provide three different training configurations: 
 
-![tab3](./pic/tab3.jpg)
+1) Without elements (*w/o* E). We develop models predicting the charge with only the given fact and the defendant's name. 
 
-### Downstream Tasks
+2) With extracted elements (*w/* E).} We develop models predicting the charge with extracted criminal elements. We mark models developed with this configuration with the symbol "*"
 
-We also explore the use of LEVEN on two [Downstreams](./Downstreams). We simply use event as side information to promote the performance of [Legal Judgment Prediction](./Downstreams/LJP) and [Similar Case Retrieval](./Downstreams/SCR). 
+3) With annotated elements (Oracle). We develop models predicting the charge with annotated criminal elements. We mark models trained using this configuration with the symbol "+".
+   
 
-The experiment results for Legal Judgment Prediction are shown below.
+### Prefomance
+ Baselines and our model EJudge their performances are as follows.
+![Alt text](./pic/fig-6.png)
 
-![tab4](./pic/tab4.jpg)
+### Evaluation on CAIL2018
+we further evalute our model EJudge on commonly used dataset [CAIL2018](https://arxiv.org/abs/1807.02478).
+![Alt text](./pic/fig-7.png)
 
-The experiment results for Similar Case Retrieval are shown below.
 
-![tab5](./pic/tab5.jpg)
 
-## Schema
 
-The Chinese event schema is shown below. Please check our paper for the English version.
 
-The detailed explanation and annotation guidelines are provided in [Annotation Guidelines](./Annotation-Guidelines).
-
-![schema](./pic/schema-zh.png)
-
-## Citation
-
-If these data and codes help you, please cite this paper.
-```bib
-@inproceedings{yao-etal-2022-leven,
-    title = "{LEVEN}: A Large-Scale {C}hinese Legal Event Detection Dataset",
-    author = "Yao, Feng and Xiao, Chaojun and Wang, Xiaozhi and Liu, Zhiyuan and Hou, Lei and Tu, Cunchao and Li, Juanzi and Liu, Yun and Shen, Weixing and Sun, Maosong",
-    booktitle = "Findings of the Association for Computational Linguistics: ACL 2022",
-    year = "2022",
-    url = "https://aclanthology.org/2022.findings-acl.17",
-    doi = "10.18653/v1/2022.findings-acl.17",
-    pages = "183--201",
-}
-```
 
